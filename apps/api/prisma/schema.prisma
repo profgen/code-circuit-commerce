@@ -1,0 +1,718 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  SELLER
+  ADMIN
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING_PAYMENT
+  PAID
+  ACCEPTED
+  PACKED
+  SHIPPED
+  DELIVERED
+  REFUND_PENDING
+  REFUNDED
+  DISPUTED
+  FAILED
+  CANCELLED
+}
+
+enum SellerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  RELEASED
+}
+
+enum ProductStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RefundStatus {
+  OPEN
+  APPROVED
+  REJECTED
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  RECEIVED
+  CLOSED
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  role         UserRole  @default(CUSTOMER)
+  tokenVersion Int       @default(1)
+  walletBalance Int      @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  cart         Cart?
+  orders       Order[]
+  sellerProfile SellerProfile?
+  walletTransactions WalletTransaction[]
+  couponRedemptions CouponRedemption[]
+  returnRequests ReturnRequest[]
+  fraudAssessments FraudAssessment[]
+  personalizationProfile PersonalizationProfile?
+  experimentAssignments ExperimentAssignment[]
+  authSessions AuthSession[]
+  permissionGrants PermissionGrant[]
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String
+  slug      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  title       String
+  slug        String      @unique
+  description String
+  price       Int
+  currency    String      @default("AED")
+  stock       Int         @default(0)
+  imageUrl    String
+  categoryId  String
+  sellerProfileId String?
+  status      ProductStatus @default(PENDING)
+  moderationNote String?
+  category    Category    @relation(fields: [categoryId], references: [id])
+  sellerProfile SellerProfile? @relation(fields: [sellerProfileId], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  reservations InventoryReservation[]
+  warehouseStocks WarehouseStock[]
+  inventoryMovements InventoryMovement[]
+  recommendationsFrom ProductRecommendation[] @relation("sourceProduct")
+  recommendationsTo ProductRecommendation[] @relation("targetProduct")
+  searchMetric ProductSearchMetric?
+  personalizedScores PersonalizationScore[]
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+  updatedAt DateTime   @updatedAt
+  createdAt DateTime   @default(now())
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  productId String
+  quantity  Int
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id])
+
+  @@unique([cartId, productId])
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  status        OrderStatus @default(DRAFT)
+  totalAmount   Int
+  discountAmount Int      @default(0)
+  storeCreditUsed Int     @default(0)
+  couponCode    String?
+  cancelReason  String?
+  currency      String      @default("AED")
+  paymentRef    String?
+  idempotencyKey String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  items         OrderItem[]
+  reservations  InventoryReservation[]
+  refunds       RefundRequest[]
+  shipmentEvents ShipmentEvent[]
+  returnRequests ReturnRequest[]
+  payoutEntries  SellerPayoutEntry[]
+  settlementEntries SettlementEntry[]
+  shipmentPackages ShipmentPackage[]
+  fraudAssessments FraudAssessment[]
+
+  @@unique([userId, idempotencyKey])
+}
+
+model OrderItem {
+  id            String  @id @default(cuid())
+  orderId       String
+  productId     String
+  snapshotTitle String
+  snapshotPrice Int
+  quantity      Int
+  order         Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product       Product @relation(fields: [productId], references: [id])
+}
+
+model SellerProfile {
+  id              String       @id @default(cuid())
+  userId           String       @unique
+  user             User         @relation(fields: [userId], references: [id])
+  businessName     String
+  legalName        String
+  contactNumber    String
+  status           SellerStatus @default(PENDING)
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  products         Product[]
+  payoutEntries    SellerPayoutEntry[]
+  settlementEntries SettlementEntry[]
+}
+
+model InventoryReservation {
+  id         String            @id @default(cuid())
+  orderId    String
+  productId  String
+  quantity   Int
+  status     ReservationStatus @default(PENDING)
+  expiresAt  DateTime
+  createdAt  DateTime          @default(now())
+  order      Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product    Product           @relation(fields: [productId], references: [id])
+}
+
+model RefundRequest {
+  id             String       @id @default(cuid())
+  orderId        String
+  reason         String
+  status         RefundStatus @default(OPEN)
+  adminNote      String?
+  createdByUserId String
+  resolvedByUserId String?
+  createdAt      DateTime     @default(now())
+  resolvedAt     DateTime?
+  order          Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model ShipmentEvent {
+  id         String   @id @default(cuid())
+  orderId    String
+  status     String
+  location   String?
+  note       String?
+  createdByUserId String
+  createdAt  DateTime @default(now())
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model Warehouse {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  city        String
+  country     String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  warehouseStocks WarehouseStock[]
+  shipmentPackages ShipmentPackage[]
+  inventoryMovements InventoryMovement[]
+}
+
+model WarehouseStock {
+  id          String   @id @default(cuid())
+  warehouseId String
+  productId   String
+  available   Int      @default(0)
+  reserved    Int      @default(0)
+  updatedAt   DateTime @updatedAt
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([warehouseId, productId])
+}
+
+model InventoryMovement {
+  id          String   @id @default(cuid())
+  productId   String
+  warehouseId String
+  delta       Int
+  reason      String
+  reference   String?
+  createdAt   DateTime @default(now())
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+}
+
+model Coupon {
+  id                    String   @id @default(cuid())
+  code                  String   @unique
+  discountType          String
+  discountValue         Int
+  minOrderAmount        Int      @default(0)
+  maxRedemptionsPerUser Int      @default(1)
+  startsAt              DateTime
+  endsAt                DateTime
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  redemptions           CouponRedemption[]
+}
+
+model CouponRedemption {
+  id        String   @id @default(cuid())
+  couponId  String
+  userId    String
+  orderId   String?
+  createdAt DateTime @default(now())
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([couponId, userId])
+}
+
+model WalletTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  orderId     String?
+  type        String
+  amount      Int
+  description String
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ReturnRequest {
+  id           String       @id @default(cuid())
+  orderId      String
+  userId       String
+  reason       String
+  status       ReturnStatus @default(REQUESTED)
+  adminNote    String?
+  requestedAt  DateTime     @default(now())
+  resolvedAt   DateTime?
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SellerPayoutEntry {
+  id              String   @id @default(cuid())
+  sellerProfileId String
+  orderId         String
+  grossAmount     Int
+  commissionAmount Int
+  netAmount       Int
+  status          String   @default("PENDING")
+  createdAt       DateTime @default(now())
+  paidAt          DateTime?
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sellerProfile   SellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+}
+
+model SettlementEntry {
+  id              String   @id @default(cuid())
+  orderId         String
+  sellerProfileId String?
+  type            String
+  grossAmount     Int
+  commissionAmount Int
+  netAmount       Int
+  currency        String   @default("AED")
+  status          String   @default("POSTED")
+  reference       String?
+  createdAt       DateTime @default(now())
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sellerProfile   SellerProfile? @relation(fields: [sellerProfileId], references: [id], onDelete: SetNull)
+}
+
+model ShipmentPackage {
+  id            String   @id @default(cuid())
+  orderId       String
+  warehouseId   String?
+  trackingNumber String
+  carrier       String?
+  status        String
+  eta           DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  warehouse     Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+}
+
+model NotificationLog {
+  id          String   @id @default(cuid())
+  userId      String
+  channel     String
+  template    String
+  payload     String
+  status      String   @default("QUEUED")
+  createdAt   DateTime @default(now())
+  deliveredAt DateTime?
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  eventName String
+  userId    String?
+  orderId   String?
+  payload   String
+  createdAt DateTime @default(now())
+}
+
+model DomainEvent {
+  id            String   @id @default(cuid())
+  aggregateType String
+  aggregateId   String
+  eventType     String
+  payload       String
+  occurredAt    DateTime @default(now())
+  published     Boolean  @default(false)
+}
+
+model PersonalizationProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  preferredCategories String
+  priceBand       String?
+  affinityTags    String?
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PersonalizationScore {
+  id         String   @id @default(cuid())
+  userId     String
+  productId  String
+  score      Float
+  source     String
+  updatedAt  DateTime @updatedAt
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId, source])
+}
+
+model Experiment {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  description String
+  variants    String
+  traffic     Int      @default(100)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  assignments ExperimentAssignment[]
+}
+
+model ExperimentAssignment {
+  id           String   @id @default(cuid())
+  experimentId String
+  userId       String
+  variant      String
+  assignedAt   DateTime @default(now())
+  experiment   Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([experimentId, userId])
+}
+
+model CacheEntry {
+  id         String   @id @default(cuid())
+  cacheKey   String   @unique
+  payload    String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+}
+
+model AuthSession {
+  id           String   @id @default(cuid())
+  userId       String
+  refreshTokenHash String
+  userAgent    String?
+  ipAddress    String?
+  isRevoked    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  revokedAt    DateTime?
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  action      String
+  resource    String
+  resourceId  String?
+  metadata    String?
+  createdAt   DateTime @default(now())
+}
+
+model PermissionGrant {
+  id          String   @id @default(cuid())
+  userId      String
+  scope       String
+  resource    String?
+  resourceId  String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, scope])
+}
+
+model TraceLog {
+  id          String   @id @default(cuid())
+  traceId     String   @unique
+  route       String
+  method      String
+  latencyMs   Int
+  statusCode  Int
+  createdAt   DateTime @default(now())
+}
+
+model SloSnapshot {
+  id              String   @id @default(cuid())
+  service         String
+  windowStart     DateTime
+  windowEnd       DateTime
+  successRate     Float
+  p95LatencyMs    Int
+  errorRate       Float
+  createdAt       DateTime @default(now())
+}
+
+model AlertRule {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  metric          String
+  threshold       Float
+  comparator      String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+}
+
+model IncidentRunbook {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  steps           String
+  owner           String
+  createdAt       DateTime @default(now())
+}
+
+model Incident {
+  id              String   @id @default(cuid())
+  title           String
+  severity        String
+  status          String   @default("OPEN")
+  runbookKey      String?
+  createdAt       DateTime @default(now())
+  resolvedAt      DateTime?
+}
+
+model ApiKey {
+  id              String   @id @default(cuid())
+  name            String
+  keyHash         String   @unique
+  ownerUserId     String?
+  scopes          String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  lastUsedAt      DateTime?
+}
+
+model RateLimitBucket {
+  id              String   @id @default(cuid())
+  bucketKey       String   @unique
+  count           Int      @default(0)
+  windowStart     DateTime
+  windowSeconds   Int
+  updatedAt       DateTime @updatedAt
+}
+
+model AbuseSignal {
+  id              String   @id @default(cuid())
+  actorKey        String
+  signalType      String
+  score           Int
+  reason          String?
+  createdAt       DateTime @default(now())
+}
+
+model CatalogImportBatch {
+  id              String   @id @default(cuid())
+  source          String
+  status          String   @default("PENDING")
+  totalItems      Int      @default(0)
+  processedItems  Int      @default(0)
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+}
+
+model CatalogImportItem {
+  id              String   @id @default(cuid())
+  batchId         String
+  payload         String
+  status          String   @default("PENDING")
+  error           String?
+  createdAt       DateTime @default(now())
+}
+
+model SearchIndexTask {
+  id              String   @id @default(cuid())
+  entityType      String
+  entityId        String
+  operation       String
+  status          String   @default("PENDING")
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+}
+
+model CheckoutAttempt {
+  id              String   @id @default(cuid())
+  userId          String
+  idempotencyKey  String
+  status          String
+  errorCode       String?
+  createdAt       DateTime @default(now())
+}
+
+model PaymentReconciliation {
+  id              String   @id @default(cuid())
+  paymentRef      String   @unique
+  orderId         String?
+  providerStatus  String
+  internalStatus  String
+  mismatch        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  resolvedAt      DateTime?
+}
+
+model BackupSnapshot {
+  id              String   @id @default(cuid())
+  target          String
+  location        String
+  checksum        String
+  status          String
+  createdAt       DateTime @default(now())
+}
+
+model DisasterRecoveryPlan {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  rtoMinutes      Int
+  rpoMinutes      Int
+  steps           String
+  createdAt       DateTime @default(now())
+}
+
+model LoadTestRun {
+  id              String   @id @default(cuid())
+  scenario        String
+  targetRps       Int
+  p95LatencyMs    Int
+  errorRate       Float
+  status          String
+  createdAt       DateTime @default(now())
+}
+
+model ReleaseGate {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  criterion       String
+  status          String
+  checkedAt       DateTime @default(now())
+}
+
+model ProductRecommendation {
+  id              String   @id @default(cuid())
+  sourceProductId String
+  targetProductId String
+  score           Float
+  reason          String?
+  createdAt       DateTime @default(now())
+  sourceProduct   Product  @relation("sourceProduct", fields: [sourceProductId], references: [id], onDelete: Cascade)
+  targetProduct   Product  @relation("targetProduct", fields: [targetProductId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceProductId, targetProductId])
+}
+
+model ProductSearchMetric {
+  id          String   @id @default(cuid())
+  productId   String   @unique
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
+  orders      Int      @default(0)
+  updatedAt   DateTime @updatedAt
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model FraudAssessment {
+  id         String   @id @default(cuid())
+  userId     String?
+  orderId    String?
+  score      Int
+  level      String
+  reasons    String
+  status     String   @default("PENDING_REVIEW")
+  createdAt  DateTime @default(now())
+  reviewedAt DateTime?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  order      Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+}
+
+model JobQueue {
+  id          String   @id @default(cuid())
+  jobType     String
+  payload     String
+  status      String   @default("QUEUED")
+  attempts    Int      @default(0)
+  lastError   String?
+  runAt       DateTime @default(now())
+  createdAt   DateTime @default(now())
+  processedAt DateTime?
+  nextRunAt   DateTime?
+}
+
+model OrderReadModel {
+  id             String   @id @default(cuid())
+  orderId        String   @unique
+  userId         String
+  status         String
+  totalAmount    Int
+  currency       String
+  itemCount      Int
+  latestEvent    String?
+  updatedAt      DateTime @updatedAt
+}
+
+model ProductReadModel {
+  id            String   @id @default(cuid())
+  productId      String   @unique
+  title          String
+  status         String
+  categorySlug   String?
+  price          Int
+  recommendationCount Int @default(0)
+  updatedAt      DateTime @updatedAt
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@code-circuit/types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "echo \"No lint configured for @code-circuit/types\"",
+    "test": "echo \"No tests configured for @code-circuit/types\"",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

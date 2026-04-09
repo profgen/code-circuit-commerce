@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: codecircuit-api
+    runtime: node
+    rootDir: .
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter api prisma:generate && pnpm --filter api build
+    startCommand: pnpm --filter api start:prod
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+
+  - type: web
+    name: codecircuit-web
+    runtime: node
+    rootDir: .
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter web build
+    startCommand: pnpm --filter web start -- --port 10000
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: API_INTERNAL_URL
+        sync: false

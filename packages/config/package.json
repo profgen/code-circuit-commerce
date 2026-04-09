@@ -1,0 +1,14 @@
+{
+  "name": "@code-circuit/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "build": "echo \"No build needed for config package\"",
+    "lint": "echo \"No lint configured for @code-circuit/config\"",
+    "test": "echo \"No tests configured for @code-circuit/config\"",
+    "format": "prettier --write \"src/**/*.{js,json}\"",
+    "typecheck": "echo \"No typecheck configured for @code-circuit/config\""
+  }
+}

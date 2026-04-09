@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+.git
+.github
+.cursor
+dist
+coverage
+*.log
+.env
+**/.env
+**/.env.local
+**/.next
+**/dist
+pnpm-debug.log*
